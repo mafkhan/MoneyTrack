@@ -7,6 +7,7 @@ import androidx.room.PrimaryKey
 data class TransactionEntity(
     @PrimaryKey(autoGenerate = true)
     val id: Int = 0,
+    val smsId: Long,  // NEW: unique SMS identifier
     val cardEnding: String,
     val shop: String,
     val amount: Double,

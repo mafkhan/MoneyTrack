@@ -76,6 +76,9 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.6")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.6")
 
+    implementation("androidx.compose.runtime:runtime-livedata:1.6.8")
+    implementation("androidx.compose.runtime:runtime:1.6.8")
+
 // Compose BOM (Bill of Materials)
     implementation ("androidx.compose:compose-bom:2023.10.00")
 

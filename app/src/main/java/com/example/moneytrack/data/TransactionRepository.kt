@@ -4,7 +4,7 @@ import kotlinx.coroutines.flow.Flow
 class TransactionRepository(private val transactionDao: TransactionDao) {
 
     val allTransactions: Flow<List<TransactionEntity>> = transactionDao.getAllTransactions()
-
+    val lastTenTransactions = transactionDao.getLastTenTransactions()
   //  suspend fun getAllTransactions(): List<TransactionEntity> {
    //     return transactionDao.getAllTransactions()
   //  }

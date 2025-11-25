@@ -2,11 +2,10 @@ package com.example.moneytrack
 
 import android.net.Uri
 import android.os.Bundle
-import android.widget.Toast
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
-import androidx.biometric.BiometricManager
-import androidx.biometric.BiometricPrompt
+import androidx.core.app.ActivityCompat
+import androidx.fragment.app.FragmentActivity
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -15,19 +14,22 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import androidx.core.app.ActivityCompat
-import androidx.core.content.ContextCompat
-import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
+import androidx.compose.runtime.livedata.observeAsState
 import com.example.moneytrack.data.AppDatabase
 import com.example.moneytrack.data.TransactionEntity
 import kotlinx.coroutines.launch
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.collectAsState
+import java.text.DecimalFormat
+
+
 
 class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // ✅ Request SMS permission
+        // Request SMS permission
         ActivityCompat.requestPermissions(
             this,
             arrayOf(android.Manifest.permission.READ_SMS),
@@ -39,164 +41,151 @@ class MainActivity : FragmentActivity() {
         val viewModelFactory = TransactionViewModelFactory(transactionDao)
         val viewModel: TransactionViewModel by viewModels { viewModelFactory }
 
-        val isAuthenticated = mutableStateOf(false)
-        val showBiometricPrompt = mutableStateOf(false)
-        val lastTenTransactions = mutableStateOf<List<TransactionEntity>>(emptyList())
 
         setContent {
             MaterialTheme {
-                when {
-                    isAuthenticated.value -> {
-                        // ✅ Fetch last 10 transactions when authenticated
-                        LaunchedEffect(Unit) {
-                            lifecycleScope.launch {
-                                lastTenTransactions.value = transactionDao.getLastTenTransactions()
-                            }
-                        }
-                        TransactionListScreen(viewModel, lastTenTransactions.value)
-                    }
-                    showBiometricPrompt.value -> {
-                        BiometricLogin(
-                            onSuccess = {
-                                fetchEiSmsAndStore(transactionDao)
-                                isAuthenticated.value = true
-                            },
-                            onError = {
-                                Toast.makeText(applicationContext, it, Toast.LENGTH_SHORT).show()
-                                showBiometricPrompt.value = false
-                            }
-                        )
-                    }
-                    else -> WelcomeScreen(
-                        onLoginClick = { showBiometricPrompt.value = true },
-                        onRegisterClick = {
-                            Toast.makeText(applicationContext, "Registration coming soon!", Toast.LENGTH_SHORT).show()
-                        }
-                    )
-                }
+                val lastTen by viewModel.lastTenTransactions.collectAsState(initial = emptyList())
+                val currentMonthTotal by viewModel.currentMonthTotal.collectAsState(initial = 0.0)
+
+                TransactionListScreen(
+                    viewModel = viewModel,
+                    //lastTen = allTransactions.takeLast(10),
+                    lastTen = lastTen,
+                    currentMonthTotal = currentMonthTotal
+                )
             }
         }
+
     }
 
-    // ✅ Fetch EI SMS and store last 5 in DB
-    private fun fetchEiSmsAndStore(transactionDao: com.example.moneytrack.data.TransactionDao) {
+    fun fetchAllEiSms(): List<Pair<Long, String>> {
+        val messages = mutableListOf<Pair<Long, String>>()
+
+        val cursor = contentResolver.query(
+            Uri.parse("content://sms/inbox"),
+            arrayOf("_id", "body", "date"),
+            "address = 'EI SMS'",
+            null,
+            "date DESC"
+        )
+
+        cursor?.use { c ->
+            val idIndex = c.getColumnIndexOrThrow("_id")
+            val bodyIndex = c.getColumnIndexOrThrow("body")
+            while (c.moveToNext()) {
+                val smsId = c.getLong(idIndex)
+                val body = c.getString(bodyIndex)
+                messages.add(Pair(smsId, body))
+            }
+        }
+
+        return messages
+    }
+
+
+    // Fetch only the latest EI SMS
+    fun fetchLatestEiSms(): Pair<Long, String>? {
         val cursor = contentResolver.query(
             Uri.parse("content://sms/inbox"),
             null,
-            "address='EI SMS'",
+            "address = 'EI SMS'",
             null,
             "date DESC"
         )
 
         cursor?.use {
-            val bodyIndex = it.getColumnIndex("body")
-            val dateIndex = it.getColumnIndex("date")
-            var count = 0
-            while (it.moveToNext() && count < 5) {
-                val body = it.getString(bodyIndex)
-                val date = it.getString(dateIndex)
-
-                val amount = extractAmount(body)
-                val cardEnding = extractCardEnding(body)
-
-                val transaction = TransactionEntity(
-                    bank = "EI Bank",
-                    amount = amount,
-                    expenseType = "Debit",
-                    shop = "Unknown",
-                    date = date,
-                    cardEnding = cardEnding,
-                    remainingLimit = "N/A"
-                )
-
-                lifecycleScope.launch {
-                    transactionDao.insert(transaction)
-                }
-                count++
+            if (it.moveToFirst()) {
+                val smsId = it.getLong(it.getColumnIndexOrThrow("_id"))
+                val body = it.getString(it.getColumnIndexOrThrow("body"))
+                return Pair(smsId, body)
             }
         }
-    }
 
-    private fun extractAmount(body: String): Double {
-        val regex = Regex("""AED\s?(\d+(\.\d{1,2})?)""")
-        return regex.find(body)?.groupValues?.get(1)?.toDoubleOrNull() ?: 0.0
-    }
-
-    private fun extractCardEnding(body: String): String {
-        val regex = Regex("""Card\s?ending\s?(\d{4})""")
-        return regex.find(body)?.groupValues?.get(1) ?: "XXXX"
+        return null
     }
 }
 
-@Composable
-fun WelcomeScreen(onLoginClick: () -> Unit, onRegisterClick: () -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(32.dp),
-        verticalArrangement = Arrangement.Center
-    ) {
-        Text("Welcome to MoneyTrack", style = MaterialTheme.typography.headlineMedium)
-        Spacer(modifier = Modifier.height(24.dp))
-        Button(onClick = onLoginClick, modifier = Modifier.fillMaxWidth()) {
-            Text("Login")
-        }
-        Spacer(modifier = Modifier.height(16.dp))
-        OutlinedButton(onClick = onRegisterClick, modifier = Modifier.fillMaxWidth()) {
-            Text("Register")
-        }
-    }
-}
-
-@Composable
-fun BiometricLogin(onSuccess: () -> Unit, onError: (String) -> Unit) {
-    val context = LocalContext.current
-    val biometricManager = BiometricManager.from(context)
-
-    LaunchedEffect(Unit) {
-        if (biometricManager.canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG) ==
-            BiometricManager.BIOMETRIC_SUCCESS) {
-
-            val executor = ContextCompat.getMainExecutor(context)
-            val biometricPrompt = BiometricPrompt(context as FragmentActivity, executor,
-                object : BiometricPrompt.AuthenticationCallback() {
-                    override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
-                        super.onAuthenticationSucceeded(result)
-                        onSuccess()
-                    }
-
-                    override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
-                        super.onAuthenticationError(errorCode, errString)
-                        onError("Error: $errString")
-                    }
-
-                    override fun onAuthenticationFailed() {
-                        super.onAuthenticationFailed()
-                        onError("Authentication failed")
-                    }
-                })
-
-            val promptInfo = BiometricPrompt.PromptInfo.Builder()
-                .setTitle("Login with Fingerprint")
-                .setSubtitle("Use your fingerprint to access MoneyTrack")
-                .setNegativeButtonText("Cancel")
-                .build()
-
-            biometricPrompt.authenticate(promptInfo)
-        } else {
-            onError("Biometric authentication not available")
-        }
-    }
-}
-
-@Composable
 @OptIn(ExperimentalMaterial3Api::class)
-fun TransactionListScreen(viewModel: TransactionViewModel, lastTen: List<TransactionEntity>) {
+@Composable
+fun TransactionListScreen(
+    viewModel: TransactionViewModel,
+    lastTen: List<TransactionEntity>,
+    currentMonthTotal: Double
+) {
+    val context = LocalContext.current
+    var latestSms by remember { mutableStateOf("") }
+
     Scaffold(
-        topBar = { TopAppBar(title = { Text("💰 MoneyTrack") }) }
+        topBar = {
+            TopAppBar(title = { Text("💰 MoneyTrack") })
+        }
     ) { padding ->
-        Column(modifier = Modifier.padding(padding)) {
-            Text("Last 10 Transactions", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(8.dp))
+
+        Column(
+            modifier = Modifier
+                .padding(padding)
+                .padding(16.dp)
+        ) {
+            // ⭐ Current Month Total Card
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text("📅 Current Month Total Expense", style = MaterialTheme.typography.titleMedium)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        //text = "AED ${"%.2f".format(currentMonthTotal)}",
+                        text = "AED ${DecimalFormat("#,###.00").format(currentMonthTotal)}",
+                        style = MaterialTheme.typography.headlineMedium
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // GET All BUTTON
+            Button(
+                onClick = {
+                    val smsList = (context as MainActivity).fetchAllEiSms()
+
+                    if (smsList.isEmpty()) {
+                        latestSms = "No EI SMS messages found."
+                        return@Button
+                    }
+
+                    (context as MainActivity).lifecycleScope.launch {
+                        var successCount = 0
+
+                        smsList.forEach { (smsId, body) ->
+                            val parsed = SmsUtils.processBankMessage(context, body)
+                            if (parsed != null) {
+                                viewModel.addTransaction(parsed)
+                                successCount++
+                            }
+                        }
+
+                        // Refresh monthly total AFTER adding transactions
+                        viewModel.loadCurrentMonthTotal()
+
+                        latestSms = "✔ Processed $successCount EI messages."
+                    }
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Get Latest")
+            }
+
+            if (latestSms.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(16.dp))
+                Text("Latest EI SMS:", style = MaterialTheme.typography.titleMedium)
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(latestSms, style = MaterialTheme.typography.bodyLarge)
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            Text("Last 10 Transactions", style = MaterialTheme.typography.titleMedium)
             LazyColumn(modifier = Modifier.fillMaxSize()) {
                 items(lastTen) { transaction ->
                     TransactionItem(transaction)
