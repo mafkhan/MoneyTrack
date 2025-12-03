@@ -1,6 +1,5 @@
 package com.example.moneytrack.data
 
-
 import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.Query
@@ -24,7 +23,7 @@ interface TransactionDao {
     fun getAllTransactions(): Flow<List<TransactionEntity>>
 
 
-    @Query("SELECT * FROM transactions ORDER BY date DESC LIMIT 10")
+    @Query("SELECT * FROM transactions ORDER BY date DESC")
     fun getLastTenTransactions(): Flow<List<TransactionEntity>>
 
     @Query("SELECT expenseType FROM transactions WHERE shop = :shop LIMIT 1")
@@ -32,6 +31,9 @@ interface TransactionDao {
 
     @Query("SELECT SUM(amount) FROM transactions WHERE substr(date, 7, 4) || '-' || substr(date, 4, 2) = strftime('%Y-%m', 'now')")
     suspend fun getCurrentMonthTotal(): Double?
+
+    @Query("SELECT SUM(amount) FROM transactions WHERE substr(date, 7, 4) || '-' || substr(date, 4, 2)|| '-' || substr(date, 1, 2) = strftime('%Y-%m-%d', 'now')")
+    suspend fun getCurrentDayTotal(): Double?
 
     @Query("""
     SELECT COUNT(*) FROM transactions
@@ -44,9 +46,28 @@ interface TransactionDao {
     @Query("SELECT COUNT(*) FROM transactions WHERE smsId = :smsId")
     suspend fun existsBySmsId(smsId: Long): Int
 
-    @Query("SELECT * FROM transactions WHERE date = :date AND amount = :amount AND cardEnding = :cardEnding LIMIT 1")
-    suspend fun findDuplicate(date: String, amount: Double, cardEnding: String): TransactionEntity?
+    @Query("SELECT * FROM transactions WHERE date = :date AND amount = :amount AND cardEnding = :cardEnding AND remainingLimit =:remainingLimit LIMIT 1")
+    suspend fun findDuplicate(date: String, amount: Double, cardEnding: String, remainingLimit: String): TransactionEntity?
+
+    @Query("SELECT * FROM transactions WHERE smsHash = :hash LIMIT 1")
+    suspend fun findByHash(hash: String): TransactionEntity?
+
+    @Query("SELECT * FROM transactions WHERE date LIKE '%' || :month || '/' || :year || '%' ORDER BY id DESC")
+    fun getCurrentMonthTransactions(month: String, year: String): Flow<List<TransactionEntity>>
 
 
+    @Query("UPDATE transactions SET expenseType = :type WHERE shop LIKE :shopPattern")
+    suspend fun updateExpenseType(shopPattern: String, type: String)
+
+
+    @Query("""
+        SELECT expenseType, SUM(amount) AS totalAmount
+        FROM transactions
+        WHERE strftime('%Y-%m',
+            substr(date, 7, 4) || '-' || substr(date, 4, 2) || '-' || substr(date, 1, 2)
+        ) = strftime('%Y-%m', 'now')
+        GROUP BY expenseType
+    """)
+    fun getCurrentMonthTotals(): Flow<List<ExpenseTypeTotal>>
 
 }

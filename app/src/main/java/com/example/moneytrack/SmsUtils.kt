@@ -14,10 +14,23 @@ object SmsUtils {
      */
     suspend fun processBankMessage(context: Context, message: String): TransactionEntity? {
         return try {
-            val cardEnding = Regex("""Card Ending:\s*(\d{4})""", RegexOption.IGNORE_CASE)
+            val smsHash = message.hashCode().toString()   // UNIQUE FINGERPRINT
+
+            val db = AppDatabase.getDatabase(context)
+            val dao = db.transactionDao()
+
+            // 🔥 Check using full SMS hash
+            val duplicate = dao.findByHash(smsHash)
+            if (duplicate != null) {
+                Log.d("SmsUtils", "Duplicate skipped (hash match)")
+                return null
+            }
+
+
+            val cardEnding = Regex("""Card Ending:\s*:?\s*(\d{4})""", RegexOption.IGNORE_CASE)
                 .find(message)?.groupValues?.get(1)
             val shop = Regex("""At:\s*(.+)""", RegexOption.IGNORE_CASE)
-                .find(message)?.groupValues?.get(1)?.trim()
+                .find(message)?.groupValues?.get(1)?.substringBefore("\n")?.trim()
             val amount = Regex("""Amount:\s*AED\s*([\d,]+(?:\.\d{1,2})?)""", RegexOption.IGNORE_CASE)
                 .find(message)?.groupValues?.get(1)?.replace(",", "")?.toDoubleOrNull()
             val date = Regex("""Date:\s*(\d{2}/\d{2}/\d{4})""", RegexOption.IGNORE_CASE)
@@ -30,20 +43,19 @@ object SmsUtils {
                 return null
             }
 
-            val db = AppDatabase.getDatabase(context)
-            val dao = db.transactionDao()
 
             // Use combination of date + amount + cardEnding as unique key
-            val existing = dao.findDuplicate(date = date, amount = amount, cardEnding = cardEnding)
+            val existing = dao.findDuplicate(date = date, amount = amount, cardEnding = cardEnding, remainingLimit = remainingLimit)
             if (existing != null) {
-                Log.d("SmsUtils", "Duplicate transaction skipped: $shop - $amount - $date")
+                Log.d("SmsUtils", "Duplicate transaction skipped: $shop - $amount - $date - $remainingLimit")
 
-                return null
-            }
+               return null
+           }
 
             val existingType = dao.getExpenseTypeForShop(shop)
 
             val transaction = TransactionEntity(
+                smsHash = smsHash,
                 smsId = System.currentTimeMillis(), // just a unique long, not for duplicate check
                 cardEnding = cardEnding,
                 shop = shop,
@@ -54,7 +66,7 @@ object SmsUtils {
                 expenseType = existingType ?: "Uncategorized"
             )
 
-            dao.insert(transaction)
+            //dao.insert(transaction)
             Log.d("SmsUtils", "Inserted transaction: $transaction")
             transaction
         } catch (e: Exception) {

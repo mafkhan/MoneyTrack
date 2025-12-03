@@ -15,7 +15,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
-import androidx.compose.runtime.livedata.observeAsState
 import com.example.moneytrack.data.AppDatabase
 import com.example.moneytrack.data.TransactionEntity
 import kotlinx.coroutines.launch
@@ -23,13 +22,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.collectAsState
 import java.text.DecimalFormat
 
-
-
 class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Request SMS permission
+        // Request SMS permission updated
         ActivityCompat.requestPermissions(
             this,
             arrayOf(android.Manifest.permission.READ_SMS),
@@ -41,20 +38,29 @@ class MainActivity : FragmentActivity() {
         val viewModelFactory = TransactionViewModelFactory(transactionDao)
         val viewModel: TransactionViewModel by viewModels { viewModelFactory }
 
+        //this is to backfill -->>    // viewModel.bulkUpdateExpenseTypes()
 
         setContent {
             MaterialTheme {
                 val lastTen by viewModel.lastTenTransactions.collectAsState(initial = emptyList())
                 val currentMonthTotal by viewModel.currentMonthTotal.collectAsState(initial = 0.0)
+                val currentDayTotal by viewModel.currentDayTotal.collectAsState(initial = 0.0)
+
 
                 TransactionListScreen(
                     viewModel = viewModel,
                     //lastTen = allTransactions.takeLast(10),
                     lastTen = lastTen,
-                    currentMonthTotal = currentMonthTotal
+                    currentMonthTotal = currentMonthTotal,
+                    currentDayTotal = currentDayTotal
+
+
                 )
+
             }
         }
+
+
 
     }
 
@@ -107,10 +113,8 @@ class MainActivity : FragmentActivity() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun TransactionListScreen(
-    viewModel: TransactionViewModel,
-    lastTen: List<TransactionEntity>,
-    currentMonthTotal: Double
+fun TransactionListScreen(viewModel: TransactionViewModel, lastTen: List<TransactionEntity>, currentMonthTotal: Double,
+    currentDayTotal: Double
 ) {
     val context = LocalContext.current
     var latestSms by remember { mutableStateOf("") }
@@ -141,6 +145,25 @@ fun TransactionListScreen(
                     )
                 }
             }
+            Spacer(modifier = Modifier.height(16.dp))
+            //Day total
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text("📅 Expense Today", style = MaterialTheme.typography.titleMedium)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        //text = "AED ${"%.2f".format(currentDayTotal)}",
+                        text = "AED ${DecimalFormat("#,###.00").format(currentDayTotal)}",
+                        style = MaterialTheme.typography.headlineMedium
+                    )
+                }
+            }
+            // type based expense expCat
+
 
             Spacer(modifier = Modifier.height(24.dp))
 
@@ -167,6 +190,7 @@ fun TransactionListScreen(
 
                         // Refresh monthly total AFTER adding transactions
                         viewModel.loadCurrentMonthTotal()
+                        viewModel.loadCurrentDayTotal()
 
                         latestSms = "✔ Processed $successCount EI messages."
                     }
@@ -185,7 +209,7 @@ fun TransactionListScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            Text("Last 10 Transactions", style = MaterialTheme.typography.titleMedium)
+            Text("Recent Transactions", style = MaterialTheme.typography.titleMedium)
             LazyColumn(modifier = Modifier.fillMaxSize()) {
                 items(lastTen) { transaction ->
                     TransactionItem(transaction)
@@ -194,7 +218,6 @@ fun TransactionListScreen(
         }
     }
 }
-
 @Composable
 fun TransactionItem(transaction: TransactionEntity) {
     Card(
@@ -213,3 +236,60 @@ fun TransactionItem(transaction: TransactionEntity) {
         }
     }
 }
+//@Composable
+//fun HomeScreen(viewModel: TransactionViewModel) {
+//
+//    val transactions by viewModel.currentMonthTransactions.collectAsState()
+//
+//    LazyColumn {
+//        items(transactions) { txn ->
+//            Text("${txn.date} - ${txn.shop} - AED ${txn.amount}")
+//        }
+//    }
+//    val totals by viewModel.currentMonthTotals.collectAsState(initial = emptyList())
+//
+//    Column {
+//
+//        // Header Row
+//        Row(modifier = Modifier.fillMaxWidth().padding(8.dp)) {
+//            Text(
+//                text = "Expense Type",
+//                modifier = Modifier.weight(1f),
+//                style = MaterialTheme.typography.titleMedium
+//            )
+//            Text(
+//                text = "Total (AED)",
+//                modifier = Modifier.weight(1f),
+//                style = MaterialTheme.typography.titleMedium
+//            )
+//        }
+//
+//        Divider()
+//
+//        // Table Data Rows
+//        LazyColumn {
+//            items(totals) { item ->
+//                Row(
+//                    modifier = Modifier
+//                        .fillMaxWidth()
+//                        .padding(vertical = 8.dp, horizontal = 8.dp)
+//                ) {
+//                    Text(
+//                        text = item.expenseType,
+//                        modifier = Modifier.weight(1f),
+//                        style = MaterialTheme.typography.bodyLarge
+//                    )
+//                    Text(
+//                        text = "%.2f".format(item.totalAmount),
+//                        modifier = Modifier.weight(1f),
+//                        style = MaterialTheme.typography.bodyLarge
+//                    )
+//                }
+//                Divider()
+//            }
+//        }
+//    }
+
+
+
+

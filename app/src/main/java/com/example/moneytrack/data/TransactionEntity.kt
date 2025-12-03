@@ -2,11 +2,13 @@ package com.example.moneytrack.data
 
 import androidx.room.Entity
 import androidx.room.PrimaryKey
+import java.util.Date
 
 @Entity(tableName = "transactions")
 data class TransactionEntity(
     @PrimaryKey(autoGenerate = true)
     val id: Int = 0,
+    val smsHash: String,
     val smsId: Long,  // NEW: unique SMS identifier
     val cardEnding: String,
     val shop: String,
@@ -16,3 +18,4 @@ data class TransactionEntity(
     val bank: String,
     val expenseType: String?
 )
+//updated

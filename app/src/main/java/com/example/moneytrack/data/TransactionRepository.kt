@@ -5,13 +5,7 @@ class TransactionRepository(private val transactionDao: TransactionDao) {
 
     val allTransactions: Flow<List<TransactionEntity>> = transactionDao.getAllTransactions()
     val lastTenTransactions = transactionDao.getLastTenTransactions()
-  //  suspend fun getAllTransactions(): List<TransactionEntity> {
-   //     return transactionDao.getAllTransactions()
-  //  }
-
-    suspend fun insert(transaction: TransactionEntity) {
-        transactionDao.insert(transaction)
-    }
+    val currentMonthTotals = transactionDao.getCurrentMonthTotals()
 
     suspend fun delete(transaction: TransactionEntity) {
         transactionDao.delete(transaction)
