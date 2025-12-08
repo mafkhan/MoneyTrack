@@ -1,5 +1,6 @@
 package com.example.moneytrack
 
+// Android / Compose
 import android.net.Uri
 import android.os.Bundle
 import androidx.activity.compose.setContent
@@ -15,54 +16,89 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
+import com.example.moneytrack.data.ExpenseTypeTotal
+// App data
 import com.example.moneytrack.data.AppDatabase
 import com.example.moneytrack.data.TransactionEntity
-import kotlinx.coroutines.launch
+
+// Compose helpers
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.collectAsState
 import java.text.DecimalFormat
 
+// Pager (experimental)
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+
+// Time
+import java.time.YearMonth
+
+@OptIn(ExperimentalFoundationApi::class)
 class MainActivity : FragmentActivity() {
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Request SMS permission updated
+        // Request SMS permission
         ActivityCompat.requestPermissions(
             this,
             arrayOf(android.Manifest.permission.READ_SMS),
             101
         )
 
+        // DB + ViewModel setup
         val db = AppDatabase.getDatabase(applicationContext)
         val transactionDao = db.transactionDao()
         val viewModelFactory = TransactionViewModelFactory(transactionDao)
         val viewModel: TransactionViewModel by viewModels { viewModelFactory }
 
-        //this is to backfill -->>    // viewModel.bulkUpdateExpenseTypes()
-
+        // Set UI
         setContent {
             MaterialTheme {
                 val lastTen by viewModel.lastTenTransactions.collectAsState(initial = emptyList())
                 val currentMonthTotal by viewModel.currentMonthTotal.collectAsState(initial = 0.0)
                 val currentDayTotal by viewModel.currentDayTotal.collectAsState(initial = 0.0)
 
+                // Month slider config
+                val currentYearMonth = YearMonth.now()
+                val monthsToShow = 13
+                val pagerState = rememberPagerState(initialPage = 0, pageCount = { monthsToShow })
 
-                TransactionListScreen(
-                    viewModel = viewModel,
-                    //lastTen = allTransactions.takeLast(10),
-                    lastTen = lastTen,
-                    currentMonthTotal = currentMonthTotal,
-                    currentDayTotal = currentDayTotal
+                Column(modifier = Modifier.fillMaxSize()) {
 
+                    // MONTHLY SLIDER
+                    HorizontalPager(
+                        state = pagerState,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(200.dp)
+                    ) { page ->
 
-                )
+                        val selectedMonth = currentYearMonth.minusMonths(page.toLong())
+                        val year = selectedMonth.year
+                        val month = selectedMonth.monthValue
 
+                        // fetch totals for the page month
+                        val totals by viewModel.getTotalsForMonth(year, month).collectAsState(initial = emptyList())
+
+                        MonthSummaryCard(yearMonth = selectedMonth, totals = totals)
+                    }
+
+                    // EXISTING MAIN UI
+                    TransactionListScreen(
+                        viewModel = viewModel,
+                        lastTen = lastTen,
+                        currentMonthTotal = currentMonthTotal,
+                        currentDayTotal = currentDayTotal
+                    )
+                }
             }
         }
-
-
-
     }
+
+    // --- Helper methods (these must be inside the Activity) ---
 
     fun fetchAllEiSms(): List<Pair<Long, String>> {
         val messages = mutableListOf<Pair<Long, String>>()
@@ -88,8 +124,6 @@ class MainActivity : FragmentActivity() {
         return messages
     }
 
-
-    // Fetch only the latest EI SMS
     fun fetchLatestEiSms(): Pair<Long, String>? {
         val cursor = contentResolver.query(
             Uri.parse("content://sms/inbox"),
@@ -111,9 +145,14 @@ class MainActivity : FragmentActivity() {
     }
 }
 
+// --- Composables: OUTSIDE the Activity class ---
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun TransactionListScreen(viewModel: TransactionViewModel, lastTen: List<TransactionEntity>, currentMonthTotal: Double,
+fun TransactionListScreen(
+    viewModel: TransactionViewModel,
+    lastTen: List<TransactionEntity>,
+    currentMonthTotal: Double,
     currentDayTotal: Double
 ) {
     val context = LocalContext.current
@@ -139,15 +178,15 @@ fun TransactionListScreen(viewModel: TransactionViewModel, lastTen: List<Transac
                     Text("📅 Current Month Total Expense", style = MaterialTheme.typography.titleMedium)
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        //text = "AED ${"%.2f".format(currentMonthTotal)}",
                         text = "AED ${DecimalFormat("#,###.00").format(currentMonthTotal)}",
                         style = MaterialTheme.typography.headlineMedium
                     )
                 }
             }
-            Spacer(modifier = Modifier.height(16.dp))
-            //Day total
 
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Day total
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
@@ -156,14 +195,11 @@ fun TransactionListScreen(viewModel: TransactionViewModel, lastTen: List<Transac
                     Text("📅 Expense Today", style = MaterialTheme.typography.titleMedium)
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        //text = "AED ${"%.2f".format(currentDayTotal)}",
                         text = "AED ${DecimalFormat("#,###.00").format(currentDayTotal)}",
                         style = MaterialTheme.typography.headlineMedium
                     )
                 }
             }
-            // type based expense expCat
-
 
             Spacer(modifier = Modifier.height(24.dp))
 
@@ -188,7 +224,7 @@ fun TransactionListScreen(viewModel: TransactionViewModel, lastTen: List<Transac
                             }
                         }
 
-                        // Refresh monthly total AFTER adding transactions
+                        // Refresh monthly & daily totals AFTER adding transactions
                         viewModel.loadCurrentMonthTotal()
                         viewModel.loadCurrentDayTotal()
 
@@ -218,6 +254,34 @@ fun TransactionListScreen(viewModel: TransactionViewModel, lastTen: List<Transac
         }
     }
 }
+
+@Composable
+fun MonthSummaryCard(yearMonth: YearMonth, totals: List<ExpenseTypeTotal>) {
+    Card(
+        modifier = Modifier
+            .padding(16.dp)
+            .fillMaxWidth(),
+        elevation = CardDefaults.cardElevation(8.dp)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                text = "${yearMonth.month} ${yearMonth.year}",
+                style = MaterialTheme.typography.titleLarge
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            if (totals.isEmpty()) {
+                Text("No data")
+            } else {
+                totals.forEach { item ->
+                    Text("${item.expenseType}: ${item.totalAmount}")
+                }
+            }
+        }
+    }
+}
+
 @Composable
 fun TransactionItem(transaction: TransactionEntity) {
     Card(
@@ -236,60 +300,3 @@ fun TransactionItem(transaction: TransactionEntity) {
         }
     }
 }
-//@Composable
-//fun HomeScreen(viewModel: TransactionViewModel) {
-//
-//    val transactions by viewModel.currentMonthTransactions.collectAsState()
-//
-//    LazyColumn {
-//        items(transactions) { txn ->
-//            Text("${txn.date} - ${txn.shop} - AED ${txn.amount}")
-//        }
-//    }
-//    val totals by viewModel.currentMonthTotals.collectAsState(initial = emptyList())
-//
-//    Column {
-//
-//        // Header Row
-//        Row(modifier = Modifier.fillMaxWidth().padding(8.dp)) {
-//            Text(
-//                text = "Expense Type",
-//                modifier = Modifier.weight(1f),
-//                style = MaterialTheme.typography.titleMedium
-//            )
-//            Text(
-//                text = "Total (AED)",
-//                modifier = Modifier.weight(1f),
-//                style = MaterialTheme.typography.titleMedium
-//            )
-//        }
-//
-//        Divider()
-//
-//        // Table Data Rows
-//        LazyColumn {
-//            items(totals) { item ->
-//                Row(
-//                    modifier = Modifier
-//                        .fillMaxWidth()
-//                        .padding(vertical = 8.dp, horizontal = 8.dp)
-//                ) {
-//                    Text(
-//                        text = item.expenseType,
-//                        modifier = Modifier.weight(1f),
-//                        style = MaterialTheme.typography.bodyLarge
-//                    )
-//                    Text(
-//                        text = "%.2f".format(item.totalAmount),
-//                        modifier = Modifier.weight(1f),
-//                        style = MaterialTheme.typography.bodyLarge
-//                    )
-//                }
-//                Divider()
-//            }
-//        }
-//    }
-
-
-
-

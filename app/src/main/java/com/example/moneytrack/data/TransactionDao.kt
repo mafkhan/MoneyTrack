@@ -70,4 +70,15 @@ interface TransactionDao {
     """)
     fun getCurrentMonthTotals(): Flow<List<ExpenseTypeTotal>>
 
+    // NEW: Dynamic month query
+    @Query("""
+        SELECT expenseType, SUM(amount) AS totalAmount
+        FROM transactions
+        WHERE strftime('%Y-%m',
+            substr(date, 7, 4) || '-' || substr(date, 4, 2) || '-' || substr(date, 1, 2)
+        ) = :yearMonth
+        GROUP BY expenseType
+    """)
+    fun getMonthlyTotals(yearMonth: String): Flow<List<ExpenseTypeTotal>>
+
 }

@@ -12,6 +12,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.Flow
+import com.example.moneytrack.data.ExpenseTypeTotal
 
 class TransactionViewModel(private val transactionDao: TransactionDao) : ViewModel() {
 
@@ -69,6 +71,7 @@ class TransactionViewModel(private val transactionDao: TransactionDao) : ViewMod
             transactionDao.insert(transaction)
         }
     }
+
 
 
     fun bulkUpdateExpenseTypes() {
@@ -197,7 +200,12 @@ class TransactionViewModel(private val transactionDao: TransactionDao) : ViewMod
         }
     }
 
+    fun getTotalsForMonth(year: Int, month: Int): Flow<List<ExpenseTypeTotal>> {
+        val yearMonth = String.format("%04d-%02d", year, month)
+        return transactionDao.getMonthlyTotals(yearMonth)
+    }
 
+    fun getCurrentMonthTotals() = transactionDao.getCurrentMonthTotals()
 
 
 }
