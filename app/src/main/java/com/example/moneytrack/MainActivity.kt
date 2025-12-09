@@ -32,6 +32,7 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 // Time
 import java.time.YearMonth
+import com.example.moneytrack.ui.dashboard.DashboardScreen
 
 @OptIn(ExperimentalFoundationApi::class)
 
@@ -54,24 +55,49 @@ class MainActivity : FragmentActivity() {
         val viewModel: TransactionViewModel by viewModels { viewModelFactory }
 
         // Set UI
+//        setContent {
+//            MaterialTheme {
+//                val lastTen by viewModel.lastTenTransactions.collectAsState(initial = emptyList())
+//                val currentMonthTotal by viewModel.currentMonthTotal.collectAsState(initial = 0.0)
+//                val currentDayTotal by viewModel.currentDayTotal.collectAsState(initial = 0.0)
+//
+//                Column(modifier = Modifier.fillMaxSize()) {
+//
+//                    // EXISTING MAIN UI
+//                    TransactionListScreen(
+//                        viewModel = viewModel,
+//                        lastTen = lastTen,
+//                        currentMonthTotal = currentMonthTotal,
+//                        currentDayTotal = currentDayTotal
+//                    )
+//                }
+//            }
+//        }
+
         setContent {
             MaterialTheme {
-                val lastTen by viewModel.lastTenTransactions.collectAsState(initial = emptyList())
-                val currentMonthTotal by viewModel.currentMonthTotal.collectAsState(initial = 0.0)
-                val currentDayTotal by viewModel.currentDayTotal.collectAsState(initial = 0.0)
-
-                Column(modifier = Modifier.fillMaxSize()) {
-
-                    // EXISTING MAIN UI
-                    TransactionListScreen(
-                        viewModel = viewModel,
-                        lastTen = lastTen,
-                        currentMonthTotal = currentMonthTotal,
-                        currentDayTotal = currentDayTotal
+                Surface(modifier = Modifier.fillMaxSize()) {
+                    val lastTen by viewModel.lastTenTransactions.collectAsState(initial = emptyList())
+                    val currentMonthTotal by viewModel.currentMonthTotal.collectAsState(initial = 0.0)
+                    val currentDayTotal by viewModel.currentDayTotal.collectAsState(initial = 0.0)
+                    DashboardScreen(
+                        todayExpense = currentDayTotal,
+                        todayChange = 5.4,               // You can replace this later with real logic
+                        monthExpense = currentMonthTotal,
+                        monthCredit = 650.00,            // Replace when real data is ready
+                        monthTransfer = 400.00,
+                        monthATM = 300.00,
+                        chartData = listOf(30f, 25f, 20f, 10f, 15f),
+                        categories = listOf(
+                            "Food" to 0.6f,
+                            "Grocery" to 0.3f
+                        )
                     )
                 }
+
             }
         }
+
     }
 
     // --- Helper methods (these must be inside the Activity) ---
