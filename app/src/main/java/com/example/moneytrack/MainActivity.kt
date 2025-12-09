@@ -18,24 +18,23 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
 import com.example.moneytrack.data.ExpenseTypeTotal
+import com.example.moneytrack.ui.MonthSlider
 // App data
 import com.example.moneytrack.data.AppDatabase
 import com.example.moneytrack.data.TransactionEntity
-
 // Compose helpers
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.collectAsState
 import java.text.DecimalFormat
-
 // Pager (experimental)
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
-
 // Time
 import java.time.YearMonth
 
 @OptIn(ExperimentalFoundationApi::class)
+
 class MainActivity : FragmentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -61,30 +60,7 @@ class MainActivity : FragmentActivity() {
                 val currentMonthTotal by viewModel.currentMonthTotal.collectAsState(initial = 0.0)
                 val currentDayTotal by viewModel.currentDayTotal.collectAsState(initial = 0.0)
 
-                // Month slider config
-                val currentYearMonth = YearMonth.now()
-                val monthsToShow = 13
-                val pagerState = rememberPagerState(initialPage = 0, pageCount = { monthsToShow })
-
                 Column(modifier = Modifier.fillMaxSize()) {
-
-                    // MONTHLY SLIDER
-                    HorizontalPager(
-                        state = pagerState,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(200.dp)
-                    ) { page ->
-
-                        val selectedMonth = currentYearMonth.minusMonths(page.toLong())
-                        val year = selectedMonth.year
-                        val month = selectedMonth.monthValue
-
-                        // fetch totals for the page month
-                        val totals by viewModel.getTotalsForMonth(year, month).collectAsState(initial = emptyList())
-
-                        MonthSummaryCard(yearMonth = selectedMonth, totals = totals)
-                    }
 
                     // EXISTING MAIN UI
                     TransactionListScreen(
@@ -124,25 +100,9 @@ class MainActivity : FragmentActivity() {
         return messages
     }
 
-    fun fetchLatestEiSms(): Pair<Long, String>? {
-        val cursor = contentResolver.query(
-            Uri.parse("content://sms/inbox"),
-            null,
-            "address = 'EI SMS'",
-            null,
-            "date DESC"
-        )
 
-        cursor?.use {
-            if (it.moveToFirst()) {
-                val smsId = it.getLong(it.getColumnIndexOrThrow("_id"))
-                val body = it.getString(it.getColumnIndexOrThrow("body"))
-                return Pair(smsId, body)
-            }
-        }
 
-        return null
-    }
+
 }
 
 // --- Composables: OUTSIDE the Activity class ---
@@ -161,6 +121,8 @@ fun TransactionListScreen(
     Scaffold(
         topBar = {
             TopAppBar(title = { Text("💰 MoneyTrack") })
+
+            MonthSlider(viewModel)
         }
     ) { padding ->
 
@@ -168,7 +130,9 @@ fun TransactionListScreen(
             modifier = Modifier
                 .padding(padding)
                 .padding(16.dp)
-        ) {
+        )
+
+        {
             // ⭐ Current Month Total Card
             Card(
                 modifier = Modifier.fillMaxWidth(),
