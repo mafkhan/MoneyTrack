@@ -1,6 +1,5 @@
 package com.example.moneytrack
 
-// Android / Compose
 import android.net.Uri
 import android.os.Bundle
 import androidx.activity.compose.setContent
@@ -8,33 +7,16 @@ import androidx.activity.viewModels
 import androidx.core.app.ActivityCompat
 import androidx.fragment.app.FragmentActivity
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.lifecycleScope
-import kotlinx.coroutines.launch
-import com.example.moneytrack.data.ExpenseTypeTotal
-import com.example.moneytrack.ui.MonthSlider
-// App data
 import com.example.moneytrack.data.AppDatabase
 import com.example.moneytrack.data.TransactionEntity
-// Compose helpers
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.collectAsState
-import java.text.DecimalFormat
-// Pager (experimental)
-import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.pager.HorizontalPager
-import androidx.compose.foundation.pager.rememberPagerState
-// Time
-import java.time.YearMonth
 import com.example.moneytrack.ui.dashboard.DashboardScreen
-
-@OptIn(ExperimentalFoundationApi::class)
+import kotlinx.coroutines.launch
+import androidx.lifecycle.lifecycleScope
 
 class MainActivity : FragmentActivity() {
 
@@ -48,60 +30,80 @@ class MainActivity : FragmentActivity() {
             101
         )
 
-        // DB + ViewModel setup
+        // ViewModel
         val db = AppDatabase.getDatabase(applicationContext)
         val transactionDao = db.transactionDao()
         val viewModelFactory = TransactionViewModelFactory(transactionDao)
         val viewModel: TransactionViewModel by viewModels { viewModelFactory }
 
-        // Set UI
-//        setContent {
-//            MaterialTheme {
-//                val lastTen by viewModel.lastTenTransactions.collectAsState(initial = emptyList())
-//                val currentMonthTotal by viewModel.currentMonthTotal.collectAsState(initial = 0.0)
-//                val currentDayTotal by viewModel.currentDayTotal.collectAsState(initial = 0.0)
-//
-//                Column(modifier = Modifier.fillMaxSize()) {
-//
-//                    // EXISTING MAIN UI
-//                    TransactionListScreen(
-//                        viewModel = viewModel,
-//                        lastTen = lastTen,
-//                        currentMonthTotal = currentMonthTotal,
-//                        currentDayTotal = currentDayTotal
-//                    )
-//                }
-//            }
-//        }
-
         setContent {
+
             MaterialTheme {
+
                 Surface(modifier = Modifier.fillMaxSize()) {
-                    val lastTen by viewModel.lastTenTransactions.collectAsState(initial = emptyList())
+
                     val currentMonthTotal by viewModel.currentMonthTotal.collectAsState(initial = 0.0)
                     val currentDayTotal by viewModel.currentDayTotal.collectAsState(initial = 0.0)
+
+                    var latestSms by remember { mutableStateOf("") }
+
                     DashboardScreen(
                         todayExpense = currentDayTotal,
-                        todayChange = 5.4,               // You can replace this later with real logic
+                        todayChange = 0.0,
                         monthExpense = currentMonthTotal,
-                        monthCredit = 650.00,            // Replace when real data is ready
-                        monthTransfer = 400.00,
-                        monthATM = 300.00,
-                        chartData = listOf(30f, 25f, 20f, 10f, 15f),
-                        categories = listOf(
-                            "Food" to 0.6f,
-                            "Grocery" to 0.3f
-                        )
+                        monthCredit = 500.0,
+                        monthTransfer = 300.0,
+                        monthATM = 200.0,
+                        chartData = listOf(30f, 25f, 20f),
+                        categories = listOf("Food" to 0.5f, "Bills" to 0.3f),
+                        latestSms = latestSms,
+                        onGetLatestClick = {
+                            onGetLatestClicked(viewModel) { msg ->
+                                latestSms = msg
+                            }
+                        }
                     )
                 }
-
             }
         }
-
     }
 
-    // --- Helper methods (these must be inside the Activity) ---
+    // -------------------------------------------------------------------------
+    // FUNCTION FIXED — MUST BE INSIDE MAINACTIVITY
+    // -------------------------------------------------------------------------
+    fun onGetLatestClicked(
+        viewModel: TransactionViewModel,
+        onResult: (String) -> Unit
+    ) {
 
+        val smsList = fetchAllEiSms()
+
+        if (smsList.isEmpty()) {
+            onResult("No EI SMS messages found.")
+            return
+        }
+
+        lifecycleScope.launch {
+            var count = 0
+
+            smsList.forEach { (_, body) ->
+                val parsed = SmsUtils.processBankMessage(this@MainActivity, body)
+                if (parsed != null) {
+                    viewModel.addTransaction(parsed)
+                    count++
+                }
+            }
+
+            viewModel.loadCurrentMonthTotal()
+            viewModel.loadCurrentDayTotal()
+
+            onResult("✔ Processed $count EI messages.")
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // FIXED — THIS MUST BE INSIDE MAINACTIVITY, OUTSIDE setContent
+    // -------------------------------------------------------------------------
     fun fetchAllEiSms(): List<Pair<Long, String>> {
         val messages = mutableListOf<Pair<Long, String>>()
 
@@ -119,174 +121,10 @@ class MainActivity : FragmentActivity() {
             while (c.moveToNext()) {
                 val smsId = c.getLong(idIndex)
                 val body = c.getString(bodyIndex)
-                messages.add(Pair(smsId, body))
+                messages.add(smsId to body)
             }
         }
 
         return messages
-    }
-
-
-
-
-}
-
-// --- Composables: OUTSIDE the Activity class ---
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun TransactionListScreen(
-    viewModel: TransactionViewModel,
-    lastTen: List<TransactionEntity>,
-    currentMonthTotal: Double,
-    currentDayTotal: Double
-) {
-    val context = LocalContext.current
-    var latestSms by remember { mutableStateOf("") }
-
-    Scaffold(
-        topBar = {
-            TopAppBar(title = { Text("💰 MoneyTrack") })
-
-            MonthSlider(viewModel)
-        }
-    ) { padding ->
-
-        Column(
-            modifier = Modifier
-                .padding(padding)
-                .padding(16.dp)
-        )
-
-        {
-            // ⭐ Current Month Total Card
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text("📅 Current Month Total Expense", style = MaterialTheme.typography.titleMedium)
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "AED ${DecimalFormat("#,###.00").format(currentMonthTotal)}",
-                        style = MaterialTheme.typography.headlineMedium
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Day total
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text("📅 Expense Today", style = MaterialTheme.typography.titleMedium)
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "AED ${DecimalFormat("#,###.00").format(currentDayTotal)}",
-                        style = MaterialTheme.typography.headlineMedium
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            // GET All BUTTON
-            Button(
-                onClick = {
-                    val smsList = (context as MainActivity).fetchAllEiSms()
-
-                    if (smsList.isEmpty()) {
-                        latestSms = "No EI SMS messages found."
-                        return@Button
-                    }
-
-                    (context as MainActivity).lifecycleScope.launch {
-                        var successCount = 0
-
-                        smsList.forEach { (smsId, body) ->
-                            val parsed = SmsUtils.processBankMessage(context, body)
-                            if (parsed != null) {
-                                viewModel.addTransaction(parsed)
-                                successCount++
-                            }
-                        }
-
-                        // Refresh monthly & daily totals AFTER adding transactions
-                        viewModel.loadCurrentMonthTotal()
-                        viewModel.loadCurrentDayTotal()
-
-                        latestSms = "✔ Processed $successCount EI messages."
-                    }
-                },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("Get Latest")
-            }
-
-            if (latestSms.isNotEmpty()) {
-                Spacer(modifier = Modifier.height(16.dp))
-                Text("Latest EI SMS:", style = MaterialTheme.typography.titleMedium)
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(latestSms, style = MaterialTheme.typography.bodyLarge)
-            }
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            Text("Recent Transactions", style = MaterialTheme.typography.titleMedium)
-            LazyColumn(modifier = Modifier.fillMaxSize()) {
-                items(lastTen) { transaction ->
-                    TransactionItem(transaction)
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun MonthSummaryCard(yearMonth: YearMonth, totals: List<ExpenseTypeTotal>) {
-    Card(
-        modifier = Modifier
-            .padding(16.dp)
-            .fillMaxWidth(),
-        elevation = CardDefaults.cardElevation(8.dp)
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text(
-                text = "${yearMonth.month} ${yearMonth.year}",
-                style = MaterialTheme.typography.titleLarge
-            )
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            if (totals.isEmpty()) {
-                Text("No data")
-            } else {
-                totals.forEach { item ->
-                    Text("${item.expenseType}: ${item.totalAmount}")
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun TransactionItem(transaction: TransactionEntity) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(8.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text("Bank: ${transaction.bank}")
-            Text("Amount: ${transaction.amount}")
-            Text("Type: ${transaction.expenseType}")
-            Text("Shop: ${transaction.shop}")
-            Text("Date: ${transaction.date}")
-            Text("CardEnding: ${transaction.cardEnding}")
-        }
     }
 }

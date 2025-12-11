@@ -2,8 +2,7 @@ package com.example.moneytrack.ui.dashboard
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
+import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -18,8 +17,11 @@ fun DashboardScreen(
     monthTransfer: Double,
     monthATM: Double,
     chartData: List<Float>,
-    categories: List<Pair<String, Float>>
+    categories: List<Pair<String, Float>>,
+    latestSms: String,
+    onGetLatestClick: () -> Unit      // <-- Only callback. No Activity calls.
 ) {
+
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
@@ -27,9 +29,30 @@ fun DashboardScreen(
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
 
-        // -----------------------------
-        // METRICS GRID
-        // -----------------------------
+        // --------------------------------
+        // GET LATEST SMS BUTTON
+        // --------------------------------
+        item {
+            Button(
+                onClick = { onGetLatestClick() },   // <-- FIXED
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Get Latest EI SMS")
+            }
+        }
+
+        // --------------------------------
+        // SHOW STATUS MESSAGE
+        // --------------------------------
+        item {
+            if (latestSms.isNotEmpty()) {
+                Text(text = latestSms, style = MaterialTheme.typography.bodyLarge)
+            }
+        }
+
+        // --------------------------------
+        // METRICS
+        // --------------------------------
         item {
             MetricsGrid(
                 items = listOf(
@@ -42,9 +65,9 @@ fun DashboardScreen(
             )
         }
 
-        // -----------------------------
+        // --------------------------------
         // DONUT CHART
-        // -----------------------------
+        // --------------------------------
         item {
             DonutChartCard(
                 title = "Monthly Expense Breakdown",
@@ -52,9 +75,9 @@ fun DashboardScreen(
             )
         }
 
-        // -----------------------------
+        // --------------------------------
         // CATEGORY BARS
-        // -----------------------------
+        // --------------------------------
         item {
             CategoryBarsCard(
                 title = "Spending Categories",
