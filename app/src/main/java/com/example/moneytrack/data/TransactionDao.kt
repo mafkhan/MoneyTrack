@@ -81,4 +81,12 @@ interface TransactionDao {
     """)
     fun getMonthlyTotals(yearMonth: String): Flow<List<ExpenseTypeTotal>>
 
+    @Query("""
+    SELECT SUM(amount)
+    FROM transactions
+    WHERE expenseType = 'ATM Withdrawal'
+    AND substr(date, 7, 4) || '-' || substr(date, 4, 2) = strftime('%Y-%m', 'now')
+""")
+    suspend fun getCurrentMonthAtmTotal(): Double?
+
 }

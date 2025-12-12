@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.Flow
 import com.example.moneytrack.data.ExpenseTypeTotal
+import java.time.YearMonth
 
 class TransactionViewModel(private val transactionDao: TransactionDao) : ViewModel() {
 
@@ -29,11 +30,15 @@ class TransactionViewModel(private val transactionDao: TransactionDao) : ViewMod
     private val _lastTenTransactions = MutableStateFlow<List<TransactionEntity>>(emptyList())
     val lastTenTransactions: StateFlow<List<TransactionEntity>> = _lastTenTransactions.asStateFlow()
 
+    private val _currentMonthAtmTotal = MutableStateFlow(0.0)
+    val currentMonthAtmTotal: StateFlow<Double> = _currentMonthAtmTotal
+
     init {
         loadAllTransactions()
         loadLastTenTransactions()
         loadCurrentMonthTotal()
         loadCurrentDayTotal()
+
     }
 
     private fun loadAllTransactions() {
@@ -207,7 +212,16 @@ class TransactionViewModel(private val transactionDao: TransactionDao) : ViewMod
 
     fun getCurrentMonthTotals() = transactionDao.getCurrentMonthTotals()
 
+    fun loadCurrentMonthAtmTotal() {
+        viewModelScope.launch {
+            val total = transactionDao.getCurrentMonthAtmTotal()
+            _currentMonthAtmTotal.value = total ?: 0.0
+        }
+    }
 
+    suspend fun existsBySmsId(smsId: Long): Boolean {
+        return transactionDao.existsBySmsId(smsId) > 0
+    }
 }
 
 
@@ -220,5 +234,7 @@ class TransactionViewModelFactory(private val transactionDao: TransactionDao) :
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }
+
+
 }
 

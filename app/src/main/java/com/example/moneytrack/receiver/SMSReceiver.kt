@@ -35,7 +35,7 @@ class SMSReceiver : BroadcastReceiver() {
 
                                 // ❗ Get smsId from message
                                 val smsId: Long = message.indexOnIccOrDefault() // helper function below
-                                SmsUtils.processBankMessage(context, msgBody)
+                                SmsUtils.processBankMessage(context, msgBody, smsId)
                             }
                         }
                     } finally {

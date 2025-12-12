@@ -10,10 +10,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.unit.dp
 import com.example.moneytrack.data.AppDatabase
-import com.example.moneytrack.data.TransactionEntity
 import com.example.moneytrack.ui.dashboard.DashboardScreen
 import kotlinx.coroutines.launch
 import androidx.lifecycle.lifecycleScope
@@ -44,7 +41,7 @@ class MainActivity : FragmentActivity() {
 
                     val currentMonthTotal by viewModel.currentMonthTotal.collectAsState(initial = 0.0)
                     val currentDayTotal by viewModel.currentDayTotal.collectAsState(initial = 0.0)
-
+                    val currentMonthAtmTotal by viewModel.currentMonthAtmTotal.collectAsState(initial = 0.0)
                     var latestSms by remember { mutableStateOf("") }
 
                     DashboardScreen(
@@ -53,7 +50,7 @@ class MainActivity : FragmentActivity() {
                         monthExpense = currentMonthTotal,
                         monthCredit = 500.0,
                         monthTransfer = 300.0,
-                        monthATM = 200.0,
+                        monthATM = currentMonthAtmTotal,
                         chartData = listOf(30f, 25f, 20f),
                         categories = listOf("Food" to 0.5f, "Bills" to 0.3f),
                         latestSms = latestSms,
@@ -86,8 +83,16 @@ class MainActivity : FragmentActivity() {
         lifecycleScope.launch {
             var count = 0
 
-            smsList.forEach { (_, body) ->
-                val parsed = SmsUtils.processBankMessage(this@MainActivity, body)
+
+                smsList.forEach { (smsId, body) ->
+                    val exists = viewModel.existsBySmsId(smsId)
+                    if (exists) return@forEach
+                    // <-- correctly receiving smsId from Pair
+                    val parsed = SmsUtils.processBankMessage(
+                        context = this@MainActivity,
+                        message = body,
+                        smsId = smsId               // <-- FIXED (this is the correct variable)
+                    )
                 if (parsed != null) {
                     viewModel.addTransaction(parsed)
                     count++
@@ -96,6 +101,7 @@ class MainActivity : FragmentActivity() {
 
             viewModel.loadCurrentMonthTotal()
             viewModel.loadCurrentDayTotal()
+            viewModel.loadCurrentMonthAtmTotal()
 
             onResult("✔ Processed $count EI messages.")
         }
